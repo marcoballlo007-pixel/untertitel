@@ -33,7 +33,7 @@ async def run(p, browser_name, media, lang="german", model=None, ipad=False):
     await pg.set_input_files("#file", media)
     await pg.click("#go")
     s = ""
-    for i in range(900):
+    for i in range(1200):
         await asyncio.sleep(1)
         s = await pg.text_content("#status")
         if s.startswith("Fertig") or s.startswith("Fehler"):

@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
   </svg>
   <div>
     <h1>Miau Untertitel</h1>
-    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 9</span></p>
+    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 10</span></p>
   </div>
 </header>
 
@@ -355,7 +355,7 @@ async function recordWC(){
     const g=setInterval(()=>{if(!isAudio&&vid.paused&&!vid.ended&&!done){vid.play().catch(()=>{})}},1000);
     let t0=performance.now();
     if(isAudio){tick()}else{vid.play().then(()=>{t0=performance.now();tick()}).catch(reject)}
-    setTimeout(()=>finish(),(total*1.5+20)*1000);
+    setTimeout(()=>{if(done)return;log("Abspielen zu langsam – fülle Rest auf");while(next<total){draw(next);next+=1/fps}finish()},(total*4+60)*1000);
   });
   vid.pause();
   log("Bilder: "+count);
