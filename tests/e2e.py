@@ -1,7 +1,7 @@
 import asyncio, base64, sys, subprocess, json
 from playwright.async_api import async_playwright
 
-async def run(p, browser_name, media, lang="german"):
+async def run(p, browser_name, media, lang="german", model=None):
     bt = getattr(p, browser_name)
     args = ["--autoplay-policy=no-user-gesture-required"] if browser_name == "chromium" else []
     b = await bt.launch(args=args)
@@ -14,6 +14,7 @@ async def run(p, browser_name, media, lang="german"):
     await asyncio.sleep(2)
     await pg.screenshot(path=f"out/{browser_name}_start.png")
     await pg.select_option("#lang", lang)
+    if model: await pg.select_option("#model", model)
     await pg.set_input_files("#file", media)
     await pg.click("#go")
     s = ""
@@ -49,6 +50,10 @@ async def main():
                 except Exception as e:
                     print(f"\n===== {br} {m} CRASH: {e}")
                     results[f"{br} {m}"] = False
+        try:
+            results["webkit small song"] = await run(p, "webkit", "media/song.mp4", model="onnx-community/whisper-small")
+        except Exception as e:
+            print("small CRASH", e)
     print("\nRESULTS:", json.dumps(results))
     sys.exit(0 if results.get("chromium media/speech.mp4") else 1)
 
