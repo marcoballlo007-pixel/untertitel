@@ -82,6 +82,20 @@ h2{font-size:18px;margin:0 0 4px}
     <button id="resplit">Neu aufteilen</button>
   </div>
   <div class="hint">„Neu aufteilen“ setzt deine Textänderungen zurück, also erst aufteilen, dann korrigieren.</div>
+  <div class="row">
+    <label class="f">Position
+      <select id="pos"><option value="0.72">Unten</option><option value="0.5">Mitte</option><option value="0.85">Ganz unten</option></select>
+    </label>
+    <label class="f">Farbe
+      <select id="col"><option value="#ffffff">Weiß</option><option value="#ffe14d">Gelb</option></select>
+    </label>
+    <label class="f">Hintergrund
+      <select id="bg"><option value="video">Mein Video</option><option value="green">Grün (zum Überlagern in CapCut)</option></select>
+    </label>
+  </div>
+  <div class="row"><button class="main" id="render">Video mit Untertiteln erstellen</button></div>
+  <div class="bar" id="rbar"><i id="rbarI"></i></div>
+  <div class="status" id="rstatus"></div>
   <div class="list" id="list"></div>
   <div class="dl">
     <button class="main" id="dSrt">SRT herunterladen</button>
@@ -89,7 +103,7 @@ h2{font-size:18px;margin:0 0 4px}
     <button id="dTxt">Nur Text</button>
     <button id="cp">SRT kopieren</button>
   </div>
-  <div class="hint"><b>Weiter benutzen:</b> Die .srt-Datei mit deinem Video an Claude schicken, dann werden die Untertitel eingebrannt. In CapCut am PC: Text → Untertitel importieren.</div>
+  <div class="hint"><b>Tipp:</b> „Grün“ erzeugt ein Video nur mit Untertiteln auf grünem Hintergrund. In CapCut als Overlay einfügen → Ausschneiden → Chroma-Key → Grün wählen, schon liegen die Untertitel über jedem Video.</div>
 </div>
 </div>
 
@@ -225,6 +239,78 @@ $("dSrt").onclick=()=>save(srt(),base()+".srt","application/x-subrip");
 $("dVtt").onclick=()=>save(vtt(),base()+".vtt","text/vtt");
 $("dTxt").onclick=()=>save(caps.map(c=>caseT(c.text.trim())).filter(Boolean).join(" ")+"\n",base()+".txt","text/plain");
 $("cp").onclick=async()=>{try{await navigator.clipboard.writeText(srt());status("SRT kopiert.")}catch(e){status("Kopieren nicht erlaubt, nutze den Download.")}};
+
+/* Vorschau-Stil an Einstellungen anpassen */
+function styleCap(){const c=$("cap");c.style.bottom="auto";c.style.top=(parseFloat($("pos").value)*100)+"%";c.style.transform="translateY(-50%)";c.style.color=$("col").value}
+$("pos").onchange=styleCap;$("col").onchange=styleCap;styleCap();
+
+/* Video mit eingebrannten Untertiteln aufnehmen */
+function wrap(ctx,text,maxW){const w=text.split(/\s+/),lines=[];let l="";for(const x of w){const t=l?l+" "+x:x;if(ctx.measureText(t).width>maxW&&l){lines.push(l);l=x}else l=t}if(l)lines.push(l);return lines}
+function drawCap(ctx,W,H,t){
+  const c=caps.find(c=>t>=c.s&&t<c.e);if(!c||!c.text.trim())return;
+  const fs=Math.round(Math.min(W,H)*0.075);
+  ctx.font="800 "+fs+"px 'Schibsted Grotesk',system-ui,sans-serif";
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";
+  const lines=wrap(ctx,caseT(c.text.trim()),W*0.86),lh=fs*1.15;
+  let y=H*parseFloat($("pos").value)-(lines.length-1)*lh/2;
+  for(const ln of lines){
+    ctx.lineWidth=fs*0.18;ctx.strokeStyle="#000";ctx.strokeText(ln,W/2,y);
+    ctx.fillStyle=$("col").value;ctx.fillText(ln,W/2,y);y+=lh;
+  }
+}
+function pickMime(){const l=["video/mp4;codecs=avc1,mp4a.40.2","video/mp4","video/webm;codecs=vp9,opus","video/webm"];for(const m of l)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m;return ""}
+let rendering=false;
+$("render").onclick=async()=>{
+  if(rendering||!file||!caps.length)return;
+  if(!window.MediaRecorder){$("rstatus").textContent="Dein Browser kann keine Videos aufnehmen. Bitte Safari oder Chrome aktualisieren.";return}
+  rendering=true;$("render").disabled=true;
+  const isAudio=file.type.startsWith("audio");const green=$("bg").value==="green"||isAudio;
+  const v=document.createElement("video");v.src=url;v.playsInline=true;v.preload="auto";
+  v.style.cssText="position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none";
+  document.body.append(v);
+  await new Promise(r=>{if(v.readyState>=1)r();else v.onloadedmetadata=r});
+  let W=v.videoWidth||1080,H=v.videoHeight||1920;
+  if(green&&!v.videoWidth){W=1080;H=1920}
+  const sc=Math.min(1,1920/Math.max(W,H));W=Math.round(W*sc/2)*2;H=Math.round(H*sc/2)*2;
+  const cv=document.createElement("canvas");cv.width=W;cv.height=H;const ctx=cv.getContext("2d");
+  const AC=window.AudioContext||window.webkitAudioContext;const ac=new AC();
+  const src=ac.createMediaElementSource(v);const dest=ac.createMediaStreamDestination();src.connect(dest);
+  const stream=cv.captureStream(30);dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+  const mime=pickMime();const rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:8000000}:{});
+  const parts=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)parts.push(e.data)};
+  const total=v.duration||dur||1;let raf=0;
+  const frame=()=>{
+    if(green){ctx.fillStyle="#00ff00";ctx.fillRect(0,0,W,H)}else ctx.drawImage(v,0,0,W,H);
+    drawCap(ctx,W,H,v.currentTime);
+    const p=Math.min(100,v.currentTime/total*100);$("rbarI").style.width=p+"%";
+    $("rstatus").textContent="Video wird erstellt … "+Math.round(p)+"% (Bildschirm anlassen, App offen lassen)";
+    raf=requestAnimationFrame(frame);
+  };
+  const done=new Promise(r=>{rec.onstop=r});
+  v.onended=()=>{setTimeout(()=>{if(rec.state!=="inactive")rec.stop()},300)};
+  $("rbar").style.display="block";
+  try{
+    await ac.resume();v.currentTime=0;rec.start(1000);frame();await v.play();
+  }catch(e){
+    cancelAnimationFrame(raf);rendering=false;$("render").disabled=false;v.remove();
+    $("rstatus").textContent="Konnte nicht starten: "+(e.message||e);return;
+  }
+  await done;cancelAnimationFrame(raf);ac.close();v.remove();
+  const type=(mime||"video/webm").split(";")[0];const ext=type.includes("mp4")?"mp4":"webm";
+  const blob=new Blob(parts,{type});
+  $("rbar").style.display="none";rendering=false;$("render").disabled=false;
+  $("rstatus").textContent="Fertig! Video wird gespeichert …";
+  const name=base()+(green&&$("bg").value==="green"?"_untertitel_gruen.":"_untertitel.")+ext;
+  const b=document.createElement("button");b.className="main";b.textContent="Video speichern";
+  b.onclick=async()=>{
+    const f=new File([blob],name,{type});
+    if(navigator.canShare&&navigator.canShare({files:[f]})&&"ontouchend" in document){
+      try{await navigator.share({files:[f]});return}catch(e){if(e.name==="AbortError")return}
+    }
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove();
+  };
+  const s=$("rstatus");s.textContent="Fertig! Tippe auf „Video speichern“ → „Video sichern“. ";s.append(b);
+};
 }
 </script>
 </body>
