@@ -14,7 +14,7 @@ async def run(p, browser_name, media, lang="german", model=None):
     await asyncio.sleep(2)
     await pg.screenshot(path=f"out/{browser_name}_start.png")
     await pg.select_option("#lang", lang)
-    if model: await pg.select_option("#model", model)
+    if model: await pg.evaluate("m=>{document.getElementById('model').value=m}", model)
     await pg.set_input_files("#file", media)
     await pg.click("#go")
     s = ""
