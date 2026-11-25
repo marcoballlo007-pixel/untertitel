@@ -16,7 +16,7 @@ jobs:
       - name: Setup
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng ffmpeg > /dev/null
-          pip install -q playwright
+          pip install -q playwright psutil
           python -m playwright install --with-deps chromium webkit > /dev/null
       - name: Testvideos erzeugen
         run: |
@@ -25,6 +25,10 @@ jobs:
           ffmpeg -loglevel error -y -f lavfi -i "color=c=0x3355aa:s=540x960:r=30" -i media/speech.wav -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac media/speech.mp4
           ffmpeg -loglevel error -y -i media/speech.wav -f lavfi -i "sine=f=220:d=15" -f lavfi -i "sine=f=330:d=15" -filter_complex "[1][2]amix=2,volume=0.25[m];[0][m]amix=2:duration=first[a]" -map "[a]" media/song.wav
           ffmpeg -loglevel error -y -f lavfi -i "color=c=0xaa3355:s=540x960:r=30" -i media/song.wav -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac media/song.mp4
+          for i in 1 2 3 4 5 6; do echo "file 'song.wav'" ; done > media/list.txt
+          ffmpeg -loglevel error -y -f concat -i media/list.txt media/long.wav
+          ffmpeg -loglevel error -y -f lavfi -i "testsrc2=s=1080x1920:r=30" -i media/long.wav -shortest -c:v libx264 -preset veryfast -b:v 6M -pix_fmt yuv420p -c:a aac media/long.mp4
+          ls -la media
       - name: Server starten
         run: nohup python -m http.server 8000 > /dev/null 2>&1 &
       - name: App testen
