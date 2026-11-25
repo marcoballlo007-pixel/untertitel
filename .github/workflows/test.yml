@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -27,6 +29,13 @@ jobs:
         run: nohup python -m http.server 8000 > /dev/null 2>&1 &
       - name: App testen
         run: python tests/e2e.py
+      - name: Bilder sichern
+        if: always()
+        run: |
+          mkdir -p /tmp/r && cp out/*.png /tmp/r/ || true
+          git config user.name test-bot && git config user.email bot@users.noreply.github.com
+          git checkout --orphan test-results && git rm -rqf . && cp /tmp/r/*.png . || true
+          git add -A && git commit -qm "Testbilder" && git push -f origin test-results || true
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: ergebnis, path: out/ }
