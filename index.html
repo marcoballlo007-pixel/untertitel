@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Untertitel Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--panel:#161c26;--line:#273142;--ink:#eef2f8;--mute:#93a0b4;--acc:#5aa9ff;--acc2:#bfe0ff;--warn:#ffb35a}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Schibsted Grotesk",system-ui,sans-serif;padding:max(16px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) 40px max(14px,env(safe-area-inset-left))}
+.wrap{max-width:900px;margin:0 auto}
+h1{font-size:clamp(28px,6vw,40px);line-height:1.05;margin:8px 0 4px;font-weight:800;background:linear-gradient(180deg,#fff,#9cc8ff 60%,#4a86d6);-webkit-background-clip:text;background-clip:text;color:transparent}
+p.sub{color:var(--mute);margin:0 0 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.drop{display:block;border:2px dashed var(--line);border-radius:14px;padding:26px 14px;text-align:center;cursor:pointer}
+.drop b{display:block;font-size:18px}.drop span{color:var(--mute);font-size:14px}
+.drop.has{border-color:var(--acc)}
+input[type=file]{display:none}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:12px}
+label.f{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:4px;flex:1 1 140px}
+select,input[type=number],input[type=text],textarea{font:inherit;font-size:16px;background:#0f141c;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;min-height:44px;width:100%}
+button{font:inherit;font-weight:600;min-height:44px;padding:10px 16px;border-radius:12px;border:1px solid var(--line);background:#1f2835;color:var(--ink);cursor:pointer}
+button.main{background:linear-gradient(180deg,#7dbdff,#3d86e0);border:0;color:#04101f;flex:1 1 200px}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+.status{margin-top:12px;font-size:14px;color:var(--mute);min-height:1.5em}
+.bar{height:8px;background:#0f141c;border-radius:9px;overflow:hidden;margin-top:8px;display:none}.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.stage{position:relative;background:#000;border-radius:14px;overflow:hidden;display:none}
+.stage video{display:block;width:100%;max-height:60vh;background:#000}
+.cap{position:absolute;left:6%;right:6%;bottom:14%;text-align:center;font-weight:800;font-size:clamp(18px,4.5vw,30px);line-height:1.15;color:#fff;text-shadow:0 0 4px #000,0 2px 6px #000,2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;pointer-events:none}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:10px;max-height:55vh;overflow:auto}
+.it{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;align-items:start;padding:8px;border-radius:12px;border:1px solid var(--line);background:#0f141c}
+.it.on{border-color:var(--acc)}
+.it .t{display:flex;flex-direction:column;gap:4px}
+.it .t input{min-height:34px;padding:4px 6px;font-size:14px;font-variant-numeric:tabular-nums}
+.it textarea{min-height:72px;resize:vertical}
+.it .x{grid-column:2;justify-self:end;display:flex;gap:6px}
+.it .x button{min-height:34px;padding:4px 10px;font-size:13px}
+.dl{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.dl button{flex:1 1 130px}
+.hint{font-size:13px;color:var(--mute);margin-top:10px}
+.hint b{color:var(--ink)}
+h2{font-size:18px;margin:0 0 4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Untertitel Maker</h1>
+<p class="sub">Audio oder Video rein → KI erstellt Untertitel → korrigieren → als SRT speichern. Alles läuft auf deinem Gerät.</p>
+
+<div class="card">
+  <label class="drop" id="drop" for="file"><b id="fname">Audio oder Video auswählen</b><span>MP3, M4A, WAV, MP4, MOV …</span></label>
+  <input type="file" id="file" accept="audio/*,video/*">
+  <div class="row">
+    <label class="f">Sprache
+      <select id="lang"><option value="german">Deutsch</option><option value="english">Englisch</option><option value="turkish">Türkisch</option><option value="auto">Automatisch</option></select>
+    </label>
+    <label class="f">Genauigkeit
+      <select id="model">
+        <option value="onnx-community/whisper-base">Normal (≈80 MB)</option>
+        <option value="onnx-community/whisper-tiny">Schnell (≈40 MB)</option>
+        <option value="onnx-community/whisper-small">Genau (≈250 MB, langsam)</option>
+      </select>
+    </label>
+  </div>
+  <div class="row"><button class="main" id="go" disabled>Untertitel erstellen</button></div>
+  <div class="bar" id="bar"><i id="barI"></i></div>
+  <div class="status" id="status">Beim ersten Mal wird die KI einmalig geladen, danach geht's schneller.</div>
+</div>
+
+<div class="card" id="editCard" style="display:none">
+  <div class="stage" id="stage"><video id="vid" playsinline controls></video><div class="cap" id="cap"></div></div>
+  <div class="row">
+    <label class="f">Wörter pro Untertitel
+      <input type="number" id="words" min="1" max="20" value="4">
+    </label>
+    <label class="f">Schreibweise
+      <select id="case"><option value="n">Normal</option><option value="u">GROSSBUCHSTABEN</option><option value="l">kleinbuchstaben</option></select>
+    </label>
+    <button id="resplit">Neu aufteilen</button>
+  </div>
+  <div class="hint">„Neu aufteilen“ setzt deine Textänderungen zurück, also erst aufteilen, dann korrigieren.</div>
+  <div class="list" id="list"></div>
+  <div class="dl">
+    <button class="main" id="dSrt">SRT herunterladen</button>
+    <button id="dVtt">VTT</button>
+    <button id="dTxt">Nur Text</button>
+    <button id="cp">SRT kopieren</button>
+  </div>
+  <div class="hint"><b>Weiter benutzen:</b> Die .srt-Datei mit deinem Video an Claude schicken, dann werden die Untertitel eingebrannt. In CapCut am PC: Text → Untertitel importieren.</div>
+</div>
+</div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+let file=null,raw=[],caps=[],dur=0,worker=null,url=null;
+
+const WORKER=`
+import {pipeline,env} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/+esm";
+env.allowLocalModels=false;
+let asr=null,cur=null;
+self.onmessage=async e=>{
+  const {audio,model,lang}=e.data;
+  try{
+    if(!asr||cur!==model){
+      const gpu=!!(self.navigator&&navigator.gpu)&&!!(await navigator.gpu.requestAdapter().catch(()=>null));
+      const opts={progress_callback:p=>{if(p.status==="progress")self.postMessage({t:"load",file:p.file,pct:p.progress})}};
+      if(gpu){opts.device="webgpu";opts.dtype={encoder_model:"fp32",decoder_model_merged:"q4"}}else{opts.dtype="q8"}
+      asr=await pipeline("automatic-speech-recognition",model,opts);cur=model;
+    }
+    self.postMessage({t:"run"});
+    const o={chunk_length_s:30,stride_length_s:5,return_timestamps:true,task:"transcribe"};
+    if(lang!=="auto")o.language=lang;
+    const out=await asr(audio,o);
+    self.postMessage({t:"done",chunks:out.chunks||[{timestamp:[0,null],text:out.text}]});
+  }catch(err){self.postMessage({t:"err",msg:String(err&&err.message||err)})}
+};`;
+
+function status(t){$("status").textContent=t}
+function bar(p){$("bar").style.display=p==null?"none":"block";$("barI").style.width=(p||0)+"%"}
+
+$("file").addEventListener("change",e=>{
+  file=e.target.files[0];if(!file)return;
+  $("fname").textContent=file.name;$("drop").classList.add("has");$("go").disabled=false;
+  if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(file);
+  $("vid").src=url;$("stage").style.display="block";
+  status("Bereit. Tippe auf „Untertitel erstellen“.");
+});
+
+async function decode(f){
+  const buf=await f.arrayBuffer();
+  const AC=window.AudioContext||window.webkitAudioContext;
+  const ac=new AC();
+  const dec=await new Promise((res,rej)=>{const p=ac.decodeAudioData(buf,res,rej);if(p&&p.catch)p.catch(rej)});
+  ac.close&&ac.close();
+  dur=dec.duration;
+  const len=Math.ceil(dec.duration*16000);
+  const off=new OfflineAudioContext(1,len,16000);
+  const src=off.createBufferSource();src.buffer=dec;src.connect(off.destination);src.start();
+  const r=await off.startRendering();
+  return r.getChannelData(0);
+}
+
+$("go").addEventListener("click",async()=>{
+  if(!file)return;
+  $("go").disabled=true;bar(0);status("Audio wird gelesen …");
+  let audio;
+  try{audio=await decode(file)}catch(e){status("Datei konnte nicht gelesen werden. Versuch MP3, M4A oder MP4.");$("go").disabled=false;bar(null);return}
+  if(!worker){
+    worker=new Worker(URL.createObjectURL(new Blob([WORKER],{type:"text/javascript"})),{type:"module"});
+    worker.onerror=e=>{status("Fehler beim Starten der KI: "+(e.message||"unbekannt"));$("go").disabled=false;bar(null)};
+  }
+  const files={};
+  worker.onmessage=e=>{
+    const m=e.data;
+    if(m.t==="load"){files[m.file]=m.pct||0;const v=Object.values(files);bar(v.reduce((a,b)=>a+b,0)/v.length);status("KI wird geladen (nur beim ersten Mal) …")}
+    else if(m.t==="run"){bar(100);status("Untertitel werden erstellt … ("+Math.round(dur)+" s Audio, kann etwas dauern)")}
+    else if(m.t==="done"){raw=m.chunks;bar(null);split();status("Fertig! "+caps.length+" Untertitel. Unten korrigieren und speichern.");$("go").disabled=false;$("editCard").style.display="block";$("editCard").scrollIntoView({behavior:"smooth"})}
+    else if(m.t==="err"){bar(null);status("Fehler: "+m.msg);$("go").disabled=false}
+  };
+  worker.postMessage({audio,model:$("model").value,lang:$("lang").value},[audio.buffer]);
+});
+
+function split(){
+  const n=Math.max(1,parseInt($("words").value)||4);caps=[];
+  raw.forEach((c,i)=>{
+    let s=c.timestamp[0]??0,e=c.timestamp[1];
+    if(e==null)e=raw[i+1]?raw[i+1].timestamp[0]:(dur||s+3);
+    const w=c.text.trim().split(/\s+/).filter(Boolean);if(!w.length)return;
+    const groups=[];for(let k=0;k<w.length;k+=n)groups.push(w.slice(k,k+n).join(" "));
+    const total=groups.reduce((a,g)=>a+g.length,0);let t=s;
+    groups.forEach(g=>{const d=(e-s)*g.length/total;caps.push({s:t,e:t+d,text:g});t+=d});
+  });
+  render();
+}
+function fmt(t,sep){t=Math.max(0,t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=Math.floor(t%60),ms=Math.round((t%1)*1000)%1000;const p=(x,l=2)=>String(x).padStart(l,"0");return p(h)+":"+p(m)+":"+p(s)+sep+p(ms,3)}
+function short(t){const m=Math.floor(t/60),s=(t%60).toFixed(2);return m+":"+(s<10?"0":"")+s}
+function parse(v){const p=v.split(":").map(Number);if(p.some(isNaN))return null;return p.reduce((a,b)=>a*60+b,0)}
+function caseT(t){const c=$("case").value;return c==="u"?t.toUpperCase():c==="l"?t.toLowerCase():t}
+
+function render(){
+  const L=$("list");L.textContent="";
+  caps.forEach((c,i)=>{
+    const d=document.createElement("div");d.className="it";d.dataset.i=i;
+    const t=document.createElement("div");t.className="t";
+    const a=document.createElement("input");a.type="text";a.value=short(c.s);a.setAttribute("aria-label","Start");
+    const b=document.createElement("input");b.type="text";b.value=short(c.e);b.setAttribute("aria-label","Ende");
+    a.onchange=()=>{const v=parse(a.value);if(v!=null)c.s=v;a.value=short(c.s)};
+    b.onchange=()=>{const v=parse(b.value);if(v!=null)c.e=v;b.value=short(c.e)};
+    t.append(a,b);
+    const x=document.createElement("textarea");x.value=c.text;x.oninput=()=>{c.text=x.value};
+    x.onfocus=()=>{const v=$("vid");v.currentTime=c.s+0.01};
+    const btns=document.createElement("div");btns.className="x";
+    const del=document.createElement("button");del.textContent="Löschen";del.onclick=()=>{caps.splice(i,1);render()};
+    const add=document.createElement("button");add.textContent="+ danach";add.onclick=()=>{caps.splice(i+1,0,{s:c.e,e:c.e+1.5,text:""});render()};
+    btns.append(add,del);
+    d.append(t,x,btns);L.append(d);
+  });
+}
+
+$("vid").addEventListener("timeupdate",()=>{
+  const t=$("vid").currentTime;const i=caps.findIndex(c=>t>=c.s&&t<c.e);
+  $("cap").textContent=i>=0?caseT(caps[i].text):"";
+  document.querySelectorAll(".it.on").forEach(e=>e.classList.remove("on"));
+  if(i>=0){const el=document.querySelector('.it[data-i="'+i+'"]');el&&el.classList.add("on")}
+});
+$("resplit").onclick=()=>{if(raw.length)split()};
+$("case").onchange=()=>$("vid").dispatchEvent(new Event("timeupdate"));
+
+function srt(){return caps.filter(c=>c.text.trim()).map((c,i)=>(i+1)+"\n"+fmt(c.s,",")+" --> "+fmt(c.e,",")+"\n"+caseT(c.text.trim())).join("\n\n")+"\n"}
+function vtt(){return "WEBVTT\n\n"+caps.filter(c=>c.text.trim()).map(c=>fmt(c.s,".")+" --> "+fmt(c.e,".")+"\n"+caseT(c.text.trim())).join("\n\n")+"\n"}
+function base(){return file?file.name.replace(/\.[^.]+$/,""):"untertitel"}
+async function save(text,name,type){
+  const blob=new Blob([text],{type});
+  const f=new File([blob],name,{type});
+  if(navigator.canShare&&navigator.canShare({files:[f]})&&/iPhone|iPad|Macintosh/.test(navigator.userAgent)&&"ontouchend" in document){
+    try{await navigator.share({files:[f]});return}catch(e){if(e.name==="AbortError")return}
+  }
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove();
+}
+$("dSrt").onclick=()=>save(srt(),base()+".srt","application/x-subrip");
+$("dVtt").onclick=()=>save(vtt(),base()+".vtt","text/vtt");
+$("dTxt").onclick=()=>save(caps.map(c=>caseT(c.text.trim())).filter(Boolean).join(" ")+"\n",base()+".txt","text/plain");
+$("cp").onclick=async()=>{try{await navigator.clipboard.writeText(srt());status("SRT kopiert.")}catch(e){status("Kopieren nicht erlaubt, nutze den Download.")}};
+}
+</script>
+</body>
+</html>
