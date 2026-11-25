@@ -9,7 +9,10 @@ async def run(p, browser_name, media, lang="german"):
     logs = []
     pg.on("console", lambda m: logs.append(m.text))
     pg.on("pageerror", lambda e: logs.append("PAGEERROR " + str(e)))
+    await pg.set_viewport_size({"width":820,"height":1180})
     await pg.goto("http://localhost:8000/index.html")
+    await asyncio.sleep(2)
+    await pg.screenshot(path=f"out/{browser_name}_start.png")
     await pg.select_option("#lang", lang)
     await pg.set_input_files("#file", media)
     await pg.click("#go")
@@ -24,6 +27,7 @@ async def run(p, browser_name, media, lang="german"):
     print("STATUS:", s)
     print("CAPTIONS:", json.dumps(caps, ensure_ascii=False))
     print("APPLOG:\n" + (await pg.text_content("#log")))
+    await pg.screenshot(path=f"out/{browser_name}_fertig.png")
     ok = s.startswith("Fertig") and len(caps) > 0
     if ok:
         d = await pg.evaluate("""async()=>{const r=window.__result;const buf=new Uint8Array(await r.blob.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=8192)s+=String.fromCharCode.apply(null,buf.subarray(i,i+8192));return [r.name,btoa(s)]}""")
