@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
   </svg>
   <div>
     <h1>Miau Untertitel</h1>
-    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 10</span></p>
+    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 11</span></p>
   </div>
 </header>
 
@@ -342,7 +342,7 @@ async function recordWC(){
   if(!isAudio){await new Promise(r=>{const d=()=>{vid.removeEventListener("seeked",d);r()};vid.addEventListener("seeked",d);vid.currentTime=0;setTimeout(d,1500)})}
   await new Promise((resolve,reject)=>{
     let done=false;
-    const finish=()=>{if(done)return;done=true;clearInterval(g);resolve()};
+    const finish=()=>{if(done)return;done=true;clearInterval(g);vid.onended=null;resolve()};
     const tick=()=>{
       if(done)return;
       if(encErr){done=true;clearInterval(g);reject(encErr);return}
@@ -352,7 +352,13 @@ async function recordWC(){
       if((isAudio&&t>=total)||(!isAudio&&(vid.ended||t>=total-0.05))){while(next<total){draw(next);next+=1/fps}finish();return}
       if(!isAudio&&vid.requestVideoFrameCallback)vid.requestVideoFrameCallback(tick);else requestAnimationFrame(tick);
     };
-    const g=setInterval(()=>{if(!isAudio&&vid.paused&&!vid.ended&&!done){vid.play().catch(()=>{})}},1000);
+    const endNow=()=>{if(done)return;while(next<total){draw(next);next+=1/fps}finish()};
+    const g=setInterval(()=>{
+      if(done||isAudio)return;
+      if(vid.ended||vid.currentTime>=total-0.05){endNow();return}
+      if(vid.paused){vid.play().catch(()=>{})}
+    },250);
+    vid.onended=()=>{if(!isAudio)endNow()};
     let t0=performance.now();
     if(isAudio){tick()}else{vid.play().then(()=>{t0=performance.now();tick()}).catch(reject)}
     setTimeout(()=>{if(done)return;log("Abspielen zu langsam – fülle Rest auf");while(next<total){draw(next);next+=1/fps}finish()},(total*4+60)*1000);
