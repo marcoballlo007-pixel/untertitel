@@ -46,7 +46,7 @@ details summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;alig
 <body>
 <div class="wrap">
 <h1>Untertitel Maker</h1>
-<p class="sub">Video oder Lied rein → KI hört zu → fertiges Video mit Untertiteln und Original-Sound.</p>
+<p class="sub">Video oder Lied rein → KI hört zu → fertiges Video mit Untertiteln und Original-Sound. <span style="opacity:.6">Version 3</span></p>
 
 <div class="card">
   <label class="drop" id="drop" for="file"><b id="fname">Video oder Audio auswählen</b><span>MP4, MOV, MP3, M4A …</span></label>
@@ -156,6 +156,12 @@ async function loadASR(model){
   asrModel=model;return asr;
 }
 
+/* ---------- [MUSIC], ♪ usw. entfernen ---------- */
+function clean(out){
+  const ch=out.chunks&&out.chunks.length?out.chunks:[{timestamp:[0,dur],text:out.text||""}];
+  return ch.map(c=>({timestamp:c.timestamp,text:(c.text||"").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*|[♪♫🎵🎶]/g," ").replace(/\s+/g," ").trim()})).filter(c=>c.text.length>0);
+}
+
 /* ---------- Untertitel aufteilen ---------- */
 function split(){
   const n=parseInt($("words").value)||4;caps=[];
@@ -208,14 +214,19 @@ async function record(){
     status("Video wird erstellt … "+Math.round(p)+" %  (App offen und Bildschirm an lassen)");
     raf=requestAnimationFrame(frame);
   };
-  const stopped=new Promise(r=>{rec.onstop=r});
-  const ended=new Promise(r=>{vid.onended=r});
+  const stopped=new Promise(r=>{rec.onstop=r;setTimeout(r,(total+15)*1000)});
+  let endR;const ended=new Promise(r=>{endR=r;vid.onended=r});
+  const guard=setInterval(()=>{if(vid.ended||vid.currentTime>=total-0.1)endR()},200);
+  setTimeout(()=>endR(),(total+8)*1000);
   await ac.resume();vid.pause();vid.currentTime=0;
   await new Promise(r=>setTimeout(r,250));
   rec.start(1000);frame();
   await vid.play();
   await ended;await new Promise(r=>setTimeout(r,300));
-  rec.stop();await stopped;cancelAnimationFrame(raf);vid.onended=null;
+  clearInterval(guard);vid.pause();
+  try{if(rec.state!=="inactive"){rec.requestData();rec.stop()}}catch(e){}
+  await stopped;cancelAnimationFrame(raf);vid.onended=null;
+  if(!parts.length)throw new Error("Aufnahme leer. Bitte nochmal „Video neu erstellen“ tippen.");
   const type=(mime||"video/webm").split(";")[0];
   return {blob:new Blob(parts,{type}),type,ext:type.includes("mp4")?"mp4":"webm"};
 }
@@ -250,8 +261,14 @@ $("go").addEventListener("click",async()=>{
     step(2);bar(100);status("KI hört zu und schreibt mit … ("+Math.round(dur)+" s, kann 1–2 Min. dauern)");
     const o={chunk_length_s:30,stride_length_s:5,return_timestamps:true,task:"transcribe"};
     if($("lang").value!=="auto")o.language=$("lang").value;
-    const out=await m(audio,o);
-    raw=out.chunks&&out.chunks.length?out.chunks:[{timestamp:[0,dur],text:out.text||""}];
+    let out=await m(audio,o);
+    raw=clean(out);
+    if(!raw.length&&$("model").value!=="onnx-community/whisper-small"){
+      step(1);bar(0);status("Nur Musik erkannt, ich nehme die genauere KI (≈250 MB, einmalig) …");
+      const m2=await loadASR("onnx-community/whisper-small");
+      step(2);bar(100);status("Genauere KI hört zu …");
+      out=await m2(audio,o);raw=clean(out);
+    }
     split();
     if(!caps.length)throw new Error("Die KI hat keine Wörter erkannt. Ist im Video gesprochen oder gesungen? Probier eine andere Sprache.");
     $("editCard").style.display="block";
