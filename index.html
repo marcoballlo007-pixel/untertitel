@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
   </svg>
   <div>
     <h1>Miau Untertitel</h1>
-    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 8</span></p>
+    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 9</span></p>
   </div>
 </header>
 
@@ -275,6 +275,13 @@ function drawCap(ctx,W,H,t){
   for(const ln of L){ctx.lineWidth=fs*0.2;ctx.strokeStyle="#000";ctx.strokeText(ln,W/2,y);ctx.fillStyle=$("col").value;ctx.fillText(ln,W/2,y);y+=lh}
 }
 function pickMime(){for(const m of["video/mp4;codecs=avc1,mp4a.40.2","video/mp4","video/webm;codecs=vp9,opus","video/webm"])if(MediaRecorder.isTypeSupported(m))return m;return ""}
+async function videoInfo(){
+  const audioFile=/^audio\//.test(file.type)||(!file.type&&/\.(mp3|m4a|wav|aac|ogg|flac)$/i.test(file.name));
+  if(audioFile)return {isAudio:true,ok:true};
+  if(!vid.videoWidth){await new Promise(r=>{const d=()=>{vid.removeEventListener("loadeddata",d);r()};vid.addEventListener("loadeddata",d);try{vid.load()}catch(e){}setTimeout(d,6000)})}
+  if(!vid.videoWidth){log("Video-Bild kann in diesem Browser nicht abgespielt werden → grüner Hintergrund");return {isAudio:true,ok:false}}
+  return {isAudio:false,ok:true};
+}
 /* Weg A: WebCodecs (echtes MP4 mit H.264 + AAC, ohne MediaRecorder) */
 const MUX="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.js";
 function loadScript(u){return new Promise((res,rej)=>{if(window.Mp4Muxer)return res();const sc=document.createElement("script");sc.src=u;sc.onload=res;sc.onerror=()=>rej(new Error("Muxer nicht geladen"));document.head.append(sc)})}
@@ -297,7 +304,7 @@ async function pickAudioCfg(sr,ch){
 async function recordWC(){
   if(!window.VideoEncoder||!window.AudioEncoder||!window.VideoFrame||!window.AudioData)throw new Error("kein WebCodecs");
   await loadScript(MUX);
-  const isAudio=!vid.videoWidth;const green=$("bg").value==="green"||isAudio;
+  const vi=await videoInfo();const isAudio=vi.isAudio;if(!vi.ok)window.__noPic=true;const green=$("bg").value==="green"||isAudio;
   let W=vid.videoWidth||1080,H=vid.videoHeight||1920;
   const sc=Math.min(1,MAXSIDE/Math.max(W,H));W=Math.round(W*sc/2)*2;H=Math.round(H*sc/2)*2;
   const vcfg=await pickVideoCfg(W,H);if(!vcfg)throw new Error("H.264 nicht unterstützt");
@@ -366,7 +373,7 @@ async function record(){
 }
 async function recordMR(){
   if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream)throw new Error("Dein Browser kann keine Videos aufnehmen. Bitte iOS/Safari aktualisieren.");
-  const isAudio=!vid.videoWidth;const green=$("bg").value==="green"||isAudio;
+  const vi=await videoInfo();const isAudio=vi.isAudio;if(!vi.ok)window.__noPic=true;const green=$("bg").value==="green"||isAudio;
   let W=vid.videoWidth||1080,H=vid.videoHeight||1920;
   const sc=Math.min(1,MAXSIDE/Math.max(W,H));W=Math.round(W*sc/2)*2;H=Math.round(H*sc/2)*2;
   const cv=document.createElement("canvas");cv.width=W;cv.height=H;const ctx=cv.getContext("2d");
@@ -414,7 +421,7 @@ function offerSave(blob,name,type,label){
 async function makeVideo(){
   step(3);status("Video wird gebaut …");
   const r=await record();bar(null);step(4);
-  status("Fertig! Tippe auf „Video speichern“ → „Video sichern“.");
+  status(window.__noPic?"Fertig – aber dein Video-Bild ließ sich hier nicht abspielen, deshalb grüner Hintergrund. Tippe auf „Video speichern“.":"Fertig! Tippe auf „Video speichern“ → „Video sichern“.",!!window.__noPic);window.__noPic=false;
   offerSave(r.blob,base()+($("bg").value==="green"?"_untertitel_gruen.":"_untertitel.")+r.ext,r.type,"Video speichern");
 }
 
