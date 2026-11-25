@@ -1,0 +1,51 @@
+import asyncio, base64, sys, subprocess, json
+from playwright.async_api import async_playwright
+
+async def run(p, browser_name, media, lang="german"):
+    bt = getattr(p, browser_name)
+    args = ["--autoplay-policy=no-user-gesture-required"] if browser_name == "chromium" else []
+    b = await bt.launch(args=args)
+    pg = await b.new_page()
+    logs = []
+    pg.on("console", lambda m: logs.append(m.text))
+    pg.on("pageerror", lambda e: logs.append("PAGEERROR " + str(e)))
+    await pg.goto("http://localhost:8000/index.html")
+    await pg.select_option("#lang", lang)
+    await pg.set_input_files("#file", media)
+    await pg.click("#go")
+    s = ""
+    for i in range(600):
+        await asyncio.sleep(1)
+        s = await pg.text_content("#status")
+        if s.startswith("Fertig") or s.startswith("Fehler"):
+            break
+    caps = await pg.evaluate("[...document.querySelectorAll('.it textarea')].map(t=>t.value)")
+    print(f"\n===== {browser_name} · {media} =====")
+    print("STATUS:", s)
+    print("CAPTIONS:", json.dumps(caps, ensure_ascii=False))
+    print("APPLOG:\n" + (await pg.text_content("#log")))
+    ok = s.startswith("Fertig") and len(caps) > 0
+    if ok:
+        d = await pg.evaluate("""async()=>{const r=window.__result;const buf=new Uint8Array(await r.blob.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=8192)s+=String.fromCharCode.apply(null,buf.subarray(i,i+8192));return [r.name,btoa(s)]}""")
+        out = f"out/{browser_name}_{d[0]}"
+        open(out, "wb").write(base64.b64decode(d[1]))
+        print("VIDEO:", out)
+        print(subprocess.run(["ffprobe","-v","error","-show_entries","stream=codec_type,codec_name:format=duration","-of","compact",out],capture_output=True,text=True).stdout)
+        subprocess.run(["ffmpeg","-loglevel","error","-y","-i",out,"-vf","select=gte(t\\,2)","-frames:v","1",out+".png"])
+    await b.close()
+    return ok
+
+async def main():
+    results = {}
+    async with async_playwright() as p:
+        for br in ["chromium", "webkit"]:
+            for m in ["media/speech.mp4", "media/song.mp4"]:
+                try:
+                    results[f"{br} {m}"] = await run(p, br, m)
+                except Exception as e:
+                    print(f"\n===== {br} {m} CRASH: {e}")
+                    results[f"{br} {m}"] = False
+    print("\nRESULTS:", json.dumps(results))
+    sys.exit(0 if results.get("chromium media/speech.mp4") else 1)
+
+asyncio.run(main())
