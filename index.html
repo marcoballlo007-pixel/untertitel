@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
   </svg>
   <div>
     <h1>Miau Untertitel</h1>
-    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 7</span></p>
+    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 8</span></p>
   </div>
 </header>
 
@@ -321,23 +321,37 @@ async function recordWC(){
     const ad=new AudioData({format:"f32-planar",sampleRate:sr,numberOfFrames:n,numberOfChannels:ch,timestamp:Math.round(i/sr*1e6),data});
     ae.encode(ad);ad.close();
   }
-  /* Video: Bild für Bild per Springen (kein Abspielen nötig) */
+  /* Video: stumm abspielen und jedes Bild mitschreiben (braucht keinen MediaRecorder) */
   const cv=document.createElement("canvas");cv.width=W;cv.height=H;const ctx=cv.getContext("2d");
   const total=isFinite(vid.duration)&&vid.duration?vid.duration:dur;
-  const fps=30,frames=Math.max(1,Math.floor(total*fps));
-  vid.pause();vid.muted=true;
-  const seek=t=>new Promise(r=>{if(isAudio)return r();const done=()=>{vid.removeEventListener("seeked",done);r()};vid.addEventListener("seeked",done);vid.currentTime=t;setTimeout(done,1500)});
-  for(let f=0;f<frames;f++){
-    if(encErr)throw encErr;
-    const t=f/fps;
-    await seek(Math.min(t,total-0.01));
+  const fps=30;let next=0,count=0,lastUi=0;
+  const draw=t=>{
     if(green){ctx.fillStyle="#00ff00";ctx.fillRect(0,0,W,H)}else ctx.drawImage(vid,0,0,W,H);
     drawCap(ctx,W,H,t);
     const vf=new VideoFrame(cv,{timestamp:Math.round(t*1e6),duration:Math.round(1e6/fps)});
-    ve.encode(vf,{keyFrame:f%60===0});vf.close();
-    while(ve.encodeQueueSize>8)await new Promise(r=>setTimeout(r,5));
-    if(f%5===0){const p=f/frames*100;bar(p);status("Video wird gebaut … "+Math.round(p)+" %  (App offen lassen)");await new Promise(r=>setTimeout(r,0))}
-  }
+    ve.encode(vf,{keyFrame:count%60===0});vf.close();count++;
+  };
+  vid.pause();vid.muted=true;vid.playbackRate=1;
+  if(!isAudio){await new Promise(r=>{const d=()=>{vid.removeEventListener("seeked",d);r()};vid.addEventListener("seeked",d);vid.currentTime=0;setTimeout(d,1500)})}
+  await new Promise((resolve,reject)=>{
+    let done=false;
+    const finish=()=>{if(done)return;done=true;clearInterval(g);resolve()};
+    const tick=()=>{
+      if(done)return;
+      if(encErr){done=true;clearInterval(g);reject(encErr);return}
+      const t=isAudio?(performance.now()-t0)/1000:vid.currentTime;
+      while(next<=t+1e-6&&next<total){draw(next);next+=1/fps}
+      if(performance.now()-lastUi>250){lastUi=performance.now();const p=Math.min(100,t/total*100);bar(p);status("Video wird gebaut … "+Math.round(p)+" %  (App offen lassen)")}
+      if((isAudio&&t>=total)||(!isAudio&&(vid.ended||t>=total-0.05))){while(next<total){draw(next);next+=1/fps}finish();return}
+      if(!isAudio&&vid.requestVideoFrameCallback)vid.requestVideoFrameCallback(tick);else requestAnimationFrame(tick);
+    };
+    const g=setInterval(()=>{if(!isAudio&&vid.paused&&!vid.ended&&!done){vid.play().catch(()=>{})}},1000);
+    let t0=performance.now();
+    if(isAudio){tick()}else{vid.play().then(()=>{t0=performance.now();tick()}).catch(reject)}
+    setTimeout(()=>finish(),(total*1.5+20)*1000);
+  });
+  vid.pause();
+  log("Bilder: "+count);
   await ve.flush();await ae.flush();if(encErr)throw encErr;
   muxer.finalize();vid.muted=false;
   const blob=new Blob([muxer.target.buffer],{type:"video/mp4"});
@@ -435,6 +449,7 @@ $("go").addEventListener("click",async()=>{
     split();
     if(!caps.length)throw new Error("Die KI hat keine Wörter erkannt. Wird im Video gesprochen oder gesungen? Probier eine andere Sprache.");
     $("editCard").style.display="block";
+    if(IOS){for(const k in cache){try{await cache[k].dispose();log("KI aus Speicher entfernt")}catch(e){}delete cache[k]}}
     stage("video");
     await makeVideo();
     stage(null);
