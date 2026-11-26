@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
   </svg>
   <div>
     <h1>Miau Untertitel</h1>
-    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 14</span></p>
+    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 15</span></p>
   </div>
 </header>
 
@@ -110,7 +110,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
       <select id="pos"><option value="0.15">Ganz oben</option><option value="0.25">Oben</option><option value="0.72" selected>Unten</option><option value="0.5">Mitte</option><option value="0.85">Ganz unten</option></select>
     </label>
     <label class="f">Farbe
-      <select id="col"><option value="#ffffff">Weiß</option><option value="#ffe14d">Gelb</option><option value="#ff86b8">Rosa</option></select>
+      <select id="col"><option value="#ffffff">Weiß</option><option value="#ffe14d">Gelb</option><option value="#ff9f1c">Orange</option><option value="#ff3b30">Rot</option><option value="#ff86b8">Rosa</option><option value="#ff2d95">Pink</option><option value="#b56cff">Lila</option><option value="#3d7bff">Blau</option><option value="#7fd6ff">Hellblau</option><option value="#2ee6c8">Türkis</option><option value="#3ddc5a">Grün</option><option value="#c6ff4d">Neongrün</option><option value="#c8a25a">Gold</option><option value="#111111">Schwarz</option><option value="custom">Eigene Farbe …</option></select><input type="color" id="colc" value="#ff4f9a" style="display:none;width:100%;height:46px;margin-top:6px;border-radius:14px;border:2px solid var(--line);background:var(--bg2)" aria-label="Eigene Farbe">
     </label>
   </div>
   <button class="main" id="go" disabled>Untertitel-Video erstellen</button>
@@ -264,6 +264,8 @@ function prime(){
   ac.resume();
   vid.muted=false;const p=vid.play();if(p&&p.then)p.then(()=>vid.pause()).catch(e=>log("Play-Vorbereitung: "+e.message));
 }
+function getCol(){const v=$("col").value;return v==="custom"?$("colc").value:v}
+function outline(c){const n=parseInt(c.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;return (0.299*r+0.587*g+0.114*b)<70?"#ffffff":"#000000"}
 function wrap(ctx,text,maxW){const w=text.split(/\s+/),L=[];let l="";for(const x of w){const t=l?l+" "+x:x;if(ctx.measureText(t).width>maxW&&l){L.push(l);l=x}else l=t}if(l)L.push(l);return L}
 function drawCap(ctx,W,H,t){
   const c=caps.find(c=>t>=c.s&&t<c.e);if(!c||!c.text.trim())return;
@@ -272,7 +274,7 @@ function drawCap(ctx,W,H,t){
   ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";
   const L=wrap(ctx,c.text.trim(),W*0.86),lh=fs*1.15;
   let y=H*parseFloat($("pos").value)-(L.length-1)*lh/2;
-  for(const ln of L){ctx.lineWidth=fs*0.2;ctx.strokeStyle="#000";ctx.strokeText(ln,W/2,y);ctx.fillStyle=$("col").value;ctx.fillText(ln,W/2,y);y+=lh}
+  for(const ln of L){const fc=getCol();ctx.lineWidth=fs*0.2;ctx.strokeStyle=outline(fc);ctx.strokeText(ln,W/2,y);ctx.fillStyle=fc;ctx.fillText(ln,W/2,y);y+=lh}
 }
 function pickMime(){for(const m of["video/mp4;codecs=avc1,mp4a.40.2","video/mp4","video/webm;codecs=vp9,opus","video/webm"])if(MediaRecorder.isTypeSupported(m))return m;return ""}
 async function videoInfo(){
@@ -500,8 +502,8 @@ vid.addEventListener("timeupdate",()=>{
   document.querySelectorAll(".it.on").forEach(e=>e.classList.remove("on"));
   if(i>=0){const el=document.querySelector('.it[data-i="'+i+'"]');el&&el.classList.add("on")}
 });
-function styleCap(){$("cap").style.top=(parseFloat($("pos").value)*100)+"%";$("cap").style.color=$("col").value}
-$("pos").onchange=styleCap;$("col").onchange=styleCap;styleCap();
+function styleCap(){const c=getCol(),o=outline(c),cap=$("cap");$("colc").style.display=$("col").value==="custom"?"block":"none";cap.style.top=(parseFloat($("pos").value)*100)+"%";cap.style.color=c;cap.style.textShadow=`2px 2px 0 ${o},-2px -2px 0 ${o},2px -2px 0 ${o},-2px 2px 0 ${o}`}
+$("pos").onchange=styleCap;$("col").onchange=styleCap;$("colc").oninput=styleCap;styleCap();
 
 function fmt(t){t=Math.max(0,t);const p=(x,l=2)=>String(x).padStart(l,"0");return p(Math.floor(t/3600))+":"+p(Math.floor(t%3600/60))+":"+p(Math.floor(t%60))+","+p(Math.round(t%1*1000)%1000,3)}
 $("dSrt").onclick=()=>{
