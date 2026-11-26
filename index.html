@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:600;min-height:46px;display:flex;alig
   </svg>
   <div>
     <h1>Miau Untertitel</h1>
-    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 11</span></p>
+    <p class="sub">Video oder Lied rein, Katze hört zu, fertiges Video mit Untertiteln raus. <span class="ver">Version 12</span></p>
   </div>
 </header>
 
@@ -340,29 +340,26 @@ async function recordWC(){
   };
   vid.pause();vid.muted=true;vid.playbackRate=1;
   if(!isAudio){await new Promise(r=>{const d=()=>{vid.removeEventListener("seeked",d);r()};vid.addEventListener("seeked",d);vid.currentTime=0;setTimeout(d,1500)})}
-  await new Promise((resolve,reject)=>{
-    let done=false;
-    const finish=()=>{if(done)return;done=true;clearInterval(g);vid.onended=null;resolve()};
-    const tick=()=>{
-      if(done)return;
-      if(encErr){done=true;clearInterval(g);reject(encErr);return}
-      const t=isAudio?(performance.now()-t0)/1000:vid.currentTime;
-      while(next<=t+1e-6&&next<total){draw(next);next+=1/fps}
-      if(performance.now()-lastUi>250){lastUi=performance.now();const p=Math.min(100,t/total*100);bar(p);status("Video wird gebaut … "+Math.round(p)+" %  (App offen lassen)")}
-      if((isAudio&&t>=total)||(!isAudio&&(vid.ended||t>=total-0.05))){while(next<total){draw(next);next+=1/fps}finish();return}
-      if(!isAudio&&vid.requestVideoFrameCallback)vid.requestVideoFrameCallback(tick);else requestAnimationFrame(tick);
-    };
-    const endNow=()=>{if(done)return;while(next<total){draw(next);next+=1/fps}finish()};
-    const g=setInterval(()=>{
-      if(done||isAudio)return;
-      if(vid.ended||vid.currentTime>=total-0.05){endNow();return}
-      if(vid.paused){vid.play().catch(()=>{})}
-    },250);
-    vid.onended=()=>{if(!isAudio)endNow()};
-    let t0=performance.now();
-    if(isAudio){tick()}else{vid.play().then(()=>{t0=performance.now();tick()}).catch(reject)}
-    setTimeout(()=>{if(done)return;log("Abspielen zu langsam – fülle Rest auf");while(next<total){draw(next);next+=1/fps}finish()},(total*4+60)*1000);
-  });
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const fillTo=async target=>{let k=0;while(next<=target+1e-6&&next<total){if(encErr)throw encErr;draw(next);next+=1/fps;while(ve.encodeQueueSize>6)await sleep(4);if(++k%10===0)await sleep(0)}};
+  const t0=performance.now();
+  if(!isAudio){try{await vid.play()}catch(e){log("Abspielen blockiert: "+e.message)}}
+  const deadline=performance.now()+(total*4+60)*1000;
+  let lastT=-1,stuck=0;
+  while(true){
+    if(encErr)throw encErr;
+    const t=isAudio?(performance.now()-t0)/1000:vid.currentTime;
+    await fillTo(Math.min(t,total));
+    const p=Math.min(100,t/total*100);bar(p);status("Video wird gebaut … "+Math.round(p)+" %  (App offen lassen)");
+    if(isAudio?t>=total:(vid.ended||t>=total-0.05))break;
+    if(performance.now()>deadline){log("Abspielen zu langsam – fülle Rest auf");break}
+    if(!isAudio){
+      if(Math.abs(t-lastT)<1e-3){if(++stuck>40){log("Video hängt bei "+t.toFixed(2)+" s – fülle Rest auf");break}if(vid.paused)vid.play().catch(()=>{})}else stuck=0;
+      lastT=t;
+    }
+    await (isAudio||!vid.requestVideoFrameCallback?sleep(1000/fps):new Promise(r=>{let ok=false;const id=vid.requestVideoFrameCallback(()=>{ok=true;r()});setTimeout(()=>{if(!ok){try{vid.cancelVideoFrameCallback(id)}catch(e){}r()}},250)}));
+  }
+  await fillTo(total);
   vid.pause();
   log("Bilder: "+count);
   await ve.flush();await ae.flush();if(encErr)throw encErr;
