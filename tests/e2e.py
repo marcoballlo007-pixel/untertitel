@@ -50,6 +50,7 @@ async def run(p, browser_name, media, lang="german", model=None, ipad=False):
     if ok:
         d = await pg.evaluate("""async()=>{const r=window.__result;const buf=new Uint8Array(await r.blob.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=8192)s+=String.fromCharCode.apply(null,buf.subarray(i,i+8192));return [r.name,btoa(s)]}""")
         out = f"out/{browser_name}{'_ipad' if ipad else ''}_{d[0]}"
+        subprocess.run(["ffmpeg","-loglevel","error","-y","-ss","40","-i",out,"-frames:v","1",out+".40s.png"])
         open(out, "wb").write(base64.b64decode(d[1]))
         print("VIDEO:", out)
         print(subprocess.run(["ffprobe","-v","error","-show_entries","stream=codec_type,codec_name:format=duration","-of","compact",out],capture_output=True,text=True).stdout)
@@ -67,6 +68,10 @@ async def main():
                 except Exception as e:
                     print(f"\n===== {br} {m} CRASH: {e}")
                     results[f"{br} {m}"] = False
+        try:
+            results["chromium ipad long"] = await run(p, "chromium", "media/long.mp4", ipad=True)
+        except Exception as e:
+            print("chromium ipad CRASH", e)
         try:
             results["ipad long"] = await run(p, "webkit", "media/long.mp4", ipad=True)
         except Exception as e:
